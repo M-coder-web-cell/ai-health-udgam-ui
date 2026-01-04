@@ -1,7 +1,7 @@
-import DrishtiAI from './components/DrishtiAI'
+import MKTAI from './components/MKTAI'
 
 function App() {
-  return <DrishtiAI />
+  return <MKTAI />
 }
 
 export default App
