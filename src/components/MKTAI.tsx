@@ -31,7 +31,9 @@ interface AgentResponse {
   search_results?: string;
   final_verdict?: string; 
   reasoning?: string;
+  // FIX: Accept both possible keys from the backend/LLM
   next_suggestion?: string[];
+  suggested_next_steps?: string[]; 
   conversation_summary?: string;
 }
 
@@ -50,20 +52,14 @@ const DEFAULT_PROFILE: UserProfile = {
   goals: []
 };
 
-// --- HELPER: Extract the valid product object from potential array mess ---
+// Helper: Extract valid product object
 const getValidProduct = (input: ProductData | ProductData[] | null | undefined): ProductData | null => {
   if (!input) return null;
-  
-  // If it's a single object, return it
   if (!Array.isArray(input)) return input;
-
-  // If it's an array, find the item that has structred data
-  // We check if 'NutritionFacts' is an object (not a string) to ensure it's the parsed version
   return input.find((item: any) => 
     typeof item === 'object' && 
     item !== null && 
     !Array.isArray(item) &&
-    // Critical Check: Ensure NutritionFacts is NOT a string
     (typeof item.NutritionFacts === 'object' || typeof item.IngredientList === 'object')
   ) || null;
 };
@@ -134,12 +130,16 @@ const AgentResponseView = ({
   const [showResults, setShowResults] = useState(false);
   const [isExpanded, setIsExpanded] = useState(true);
 
-  // --- FIX: Use the helper to robustly get the product ---
   const product = getValidProduct(data.product_json);
 
   const planSteps = data.plan 
     ? data.plan.split('. ').filter(step => step.length > 5).slice(0, 5) 
     : [];
+
+  // --- FIX: Normalize suggestions to handle both key names ---
+  const suggestions = (data.suggested_next_steps && data.suggested_next_steps.length > 0) 
+    ? data.suggested_next_steps 
+    : (data.next_suggestion || []);
 
   useEffect(() => {
     if (!isProcessing && data.final_verdict) {
@@ -235,7 +235,6 @@ const AgentResponseView = ({
             </motion.div>
           )}
 
-          {/* Use the normalized 'product' variable here */}
           {product && (
             <motion.div 
               initial={{ opacity: 0, y: 20 }}
@@ -264,7 +263,6 @@ const AgentResponseView = ({
                <div className="bg-zinc-900/30 border border-zinc-800 p-6 rounded-2xl">
                    <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-widest mb-4">Nutrition</h3>
                    <div className="space-y-3">
-                     {/* Robust Check: Ensure NutritionFacts is actually an object before calling entries */}
                      {product.NutritionFacts && typeof product.NutritionFacts === 'object' && Object.entries(product.NutritionFacts).length > 0 ? (
                         Object.entries(product.NutritionFacts).map(([k, v]) => (
                          <div key={k} className="flex justify-between items-center text-sm border-b border-zinc-800/50 pb-2 last:border-0 last:pb-0">
@@ -280,7 +278,7 @@ const AgentResponseView = ({
             </motion.div>
           )}
 
-          {(data.search_results || data.reasoning) && (
+          {(data.reasoning || data.search_results) && (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -288,25 +286,26 @@ const AgentResponseView = ({
               className="prose prose-invert prose-sm max-w-none pl-1"
             >
                <div className="flex items-center gap-2 mb-2">
-                 <FileText className="w-4 h-4 text-zinc-500" />
-                 <span className="text-xs font-bold text-zinc-500 uppercase">
-                   {data.search_results ? "Research Findings" : "Detailed Analysis"}
+                 <Sparkles className="w-4 h-4 text-indigo-400" />
+                 <span className="text-xs font-bold text-indigo-400 uppercase tracking-wider">
+                   AI Analysis
                  </span>
                </div>
-               <div className="text-zinc-300 leading-7 text-[15px] whitespace-pre-line">
-                 {data.search_results || data.reasoning}
+               <div className="text-zinc-300 leading-7 text-[15px] whitespace-pre-line font-medium">
+                 {data.reasoning || data.search_results}
                </div>
             </motion.div>
           )}
 
-          {data.next_suggestion && data.next_suggestion.length > 0 && (
+          {/* --- FIX: Use the 'suggestions' variable which contains the data --- */}
+          {suggestions.length > 0 && (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: 2.0 }}
               className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-4 border-t border-zinc-800/50"
             >
-              {data.next_suggestion.map((s, i) => (
+              {suggestions.map((s, i) => (
                 <button 
                   key={i} 
                   onClick={() => !isProcessing && onFollowUpClick(s)}
