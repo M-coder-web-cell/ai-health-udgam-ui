@@ -31,7 +31,6 @@ interface AgentResponse {
   search_results?: string;
   final_verdict?: string; 
   reasoning?: string;
-  // FIX: Accept both possible keys from the backend/LLM
   next_suggestion?: string[];
   suggested_next_steps?: string[]; 
   conversation_summary?: string;
@@ -52,7 +51,6 @@ const DEFAULT_PROFILE: UserProfile = {
   goals: []
 };
 
-// Helper: Extract valid product object
 const getValidProduct = (input: ProductData | ProductData[] | null | undefined): ProductData | null => {
   if (!input) return null;
   if (!Array.isArray(input)) return input;
@@ -136,7 +134,6 @@ const AgentResponseView = ({
     ? data.plan.split('. ').filter(step => step.length > 5).slice(0, 5) 
     : [];
 
-  // --- FIX: Normalize suggestions to handle both key names ---
   const suggestions = (data.suggested_next_steps && data.suggested_next_steps.length > 0) 
     ? data.suggested_next_steps 
     : (data.next_suggestion || []);
@@ -297,7 +294,6 @@ const AgentResponseView = ({
             </motion.div>
           )}
 
-          {/* --- FIX: Use the 'suggestions' variable which contains the data --- */}
           {suggestions.length > 0 && (
             <motion.div
               initial={{ opacity: 0 }}
@@ -383,12 +379,29 @@ const MKTAI: React.FC = () => {
       timestamp: new Date(),
       isStreaming: true
     }]);
+    
+    let memoryContext = "";
+    if (messages.length > 0) {
+        const recentMessages = messages.slice(-6); 
+        memoryContext = "PREVIOUS CONVERSATION CONTEXT:\n";
+        
+        recentMessages.forEach(m => {
+           if (m.type === 'user') {
+               memoryContext += `User: ${m.content}\n`;
+           } else if (m.agentResponse) {
+               memoryContext += `AI Verdict: ${m.agentResponse.final_verdict || 'Unknown'}\n`;
+           }
+        });
+        memoryContext += "\nCURRENT QUESTION:\n";
+    }
+
+    const finalPromptToSend = memoryContext ? (memoryContext + prompt) : prompt;
 
     try {
       const formData = new FormData();
       
       const agentState = {
-         user_query: prompt,
+         user_query: finalPromptToSend, 
          user_profile: userProfile,
          image_data: null, 
          next_suggestion: [] 
@@ -400,7 +413,7 @@ const MKTAI: React.FC = () => {
           formData.append("file", file);
       }
 
-      const res = await fetch('http://localhost:8000/process', {
+      const res = await fetch(`http://ec2-54-89-24-253.compute-1.amazonaws.com:8000/process`, {
         method: 'POST',
         body: formData 
       });
