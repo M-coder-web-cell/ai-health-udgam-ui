@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  Upload, Brain, Search, AlertTriangle, CheckCircle, AlertCircle, 
-  X, ChevronRight, Activity, Zap, FileText, ArrowRight, Loader2, 
-  ScanLine, Image as ImageIcon, ChevronDown, ChevronUp, Sparkles 
+  Upload, Brain, Search, AlertTriangle, CheckCircle, AlertCircle,
+  Activity, ArrowRight, ScanLine, ChevronDown, ChevronUp, Sparkles
 } from 'lucide-react';
+
 
 interface UserProfile {
   allergies: string[];
