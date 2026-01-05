@@ -413,10 +413,13 @@ const MKTAI: React.FC = () => {
           formData.append("file", file);
       }
 
-      const res = await fetch(`http://ec2-54-89-24-253.compute-1.amazonaws.com:8000/process`, {
-        method: 'POST',
-        body: formData 
-      });
+      const res = await fetch(
+        `${import.meta.env.VITE_UDGAM_BACKEND_URL}/process`,
+        {
+          method: 'POST',
+          body: formData
+        }
+      );
 
       if (!res.ok) {
         const errorDetail = await res.json();
