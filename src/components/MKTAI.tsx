@@ -414,7 +414,7 @@ const MKTAI: React.FC = () => {
       }
 
       const res = await fetch(
-        `${import.meta.env.VITE_UDGAM_BACKEND_URL}/process`,
+        `${import.meta.env.VITE_BACKEND_URL}/process`,
         {
           method: 'POST',
           body: formData
