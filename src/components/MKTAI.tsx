@@ -15,16 +15,16 @@ interface UserProfile {
 interface ProductData {
   product_name?: string | null;
   company_name?: string | null;
-  IngredientList: string[];
-  NutritionFacts: Record<string, string>;
-  MarketingClaims: string[];
+  IngredientList?: string[]; 
+  NutritionFacts?: Record<string, string>; 
+  MarketingClaims?: string[]; 
 }
 
 interface AgentResponse {
   user_query: string;
   user_profile?: UserProfile;
   image_data?: string | null; 
-  product_json?: ProductData | null;
+  product_json?: ProductData | ProductData[] | null; 
   plan?: string;
   search_needed?: boolean;
   search_queries?: string[];
@@ -48,6 +48,24 @@ const DEFAULT_PROFILE: UserProfile = {
   allergies: [],
   conditions: [], 
   goals: []
+};
+
+// --- HELPER: Extract the valid product object from potential array mess ---
+const getValidProduct = (input: ProductData | ProductData[] | null | undefined): ProductData | null => {
+  if (!input) return null;
+  
+  // If it's a single object, return it
+  if (!Array.isArray(input)) return input;
+
+  // If it's an array, find the item that has structred data
+  // We check if 'NutritionFacts' is an object (not a string) to ensure it's the parsed version
+  return input.find((item: any) => 
+    typeof item === 'object' && 
+    item !== null && 
+    !Array.isArray(item) &&
+    // Critical Check: Ensure NutritionFacts is NOT a string
+    (typeof item.NutritionFacts === 'object' || typeof item.IngredientList === 'object')
+  ) || null;
 };
 
 const ThinkingIndicator = ({ step }: { step: string }) => (
@@ -115,6 +133,9 @@ const AgentResponseView = ({
 }) => {
   const [showResults, setShowResults] = useState(false);
   const [isExpanded, setIsExpanded] = useState(true);
+
+  // --- FIX: Use the helper to robustly get the product ---
+  const product = getValidProduct(data.product_json);
 
   const planSteps = data.plan 
     ? data.plan.split('. ').filter(step => step.length > 5).slice(0, 5) 
@@ -186,9 +207,9 @@ const AgentResponseView = ({
                     );
                   })}
                   {data.plan && data.plan.split('. ').filter(s => s.length > 5).length > 5 && (
-                     <div className="pl-5 text-[10px] text-zinc-600 font-mono italic">
-                       ...and more checks
-                     </div>
+                      <div className="pl-5 text-[10px] text-zinc-600 font-mono italic">
+                        ...and more checks
+                      </div>
                   )}
                 </div>
               </motion.div>
@@ -214,7 +235,8 @@ const AgentResponseView = ({
             </motion.div>
           )}
 
-          {data.product_json && (
+          {/* Use the normalized 'product' variable here */}
+          {product && (
             <motion.div 
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -227,22 +249,32 @@ const AgentResponseView = ({
                      <span className="text-[10px] font-mono text-emerald-500">AI EXTRACTED</span>
                    </div>
                    <div className="flex flex-wrap gap-2">
-                     {data.product_json.IngredientList.map((ing, i) => (
-                       <span key={i} className="px-2 py-1 bg-black border border-zinc-800 rounded text-xs text-zinc-300 font-mono cursor-default">
-                         {ing}
-                       </span>
-                     ))}
+                     {(product.IngredientList || []).length > 0 ? (
+                        (product.IngredientList || []).map((ing, i) => (
+                         <span key={i} className="px-2 py-1 bg-black border border-zinc-800 rounded text-xs text-zinc-300 font-mono cursor-default">
+                           {ing}
+                         </span>
+                       ))
+                     ) : (
+                       <span className="text-xs text-zinc-600 italic">No ingredients detected.</span>
+                     )}
                    </div>
                </div>
+               
                <div className="bg-zinc-900/30 border border-zinc-800 p-6 rounded-2xl">
                    <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-widest mb-4">Nutrition</h3>
                    <div className="space-y-3">
-                     {Object.entries(data.product_json.NutritionFacts).map(([k, v]) => (
-                       <div key={k} className="flex justify-between items-center text-sm border-b border-zinc-800/50 pb-2 last:border-0 last:pb-0">
-                         <span className="text-zinc-500">{k}</span>
-                         <span className="font-mono text-zinc-200 font-bold">{v}</span>
-                       </div>
-                     ))}
+                     {/* Robust Check: Ensure NutritionFacts is actually an object before calling entries */}
+                     {product.NutritionFacts && typeof product.NutritionFacts === 'object' && Object.entries(product.NutritionFacts).length > 0 ? (
+                        Object.entries(product.NutritionFacts).map(([k, v]) => (
+                         <div key={k} className="flex justify-between items-center text-sm border-b border-zinc-800/50 pb-2 last:border-0 last:pb-0">
+                           <span className="text-zinc-500 capitalize">{k}</span>
+                           <span className="font-mono text-zinc-200 font-bold">{String(v)}</span>
+                         </div>
+                       ))
+                     ) : (
+                        <span className="text-xs text-zinc-600 italic">No data available.</span>
+                     )}
                    </div>
                </div>
             </motion.div>
@@ -311,7 +343,7 @@ const MKTAI: React.FC = () => {
   const updateAgentMsg = (id: string, updates: Partial<AgentResponse>) => {
     setMessages(prev => prev.map(m => 
       m.id === id 
-        ? { ...m, agentResponse: { ...m.agentResponse!, ...updates }, isStreaming: false } 
+        ? { ...m, agentResponse: { ...(m.agentResponse || {} as AgentResponse), ...updates }, isStreaming: false } 
         : m
     ));
   };
@@ -322,13 +354,13 @@ const MKTAI: React.FC = () => {
       const reader = new FileReader();
       reader.onloadend = () => {
         const base64String = reader.result as string;
-        sendPromptToBackend("Analyze this label", base64String);
+        sendPromptToBackend("Analyze this label", base64String, file);
       };
       reader.readAsDataURL(file);
     }
   };
 
-  const sendPromptToBackend = async (prompt: string, imageData: string | null) => {
+  const sendPromptToBackend = async (prompt: string, imageData: string | null, file: File | null = null) => {
     setIsProcessing(true);
     setCurrentProcessLog("Analyzing request..."); 
 
@@ -354,15 +386,24 @@ const MKTAI: React.FC = () => {
     }]);
 
     try {
+      const formData = new FormData();
+      
+      const agentState = {
+         user_query: prompt,
+         user_profile: userProfile,
+         image_data: null, 
+         next_suggestion: [] 
+      };
+
+      formData.append("state_json", JSON.stringify(agentState));
+
+      if (file) {
+          formData.append("file", file);
+      }
+
       const res = await fetch('http://localhost:8000/process', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          user_query: prompt, 
-          user_profile: userProfile,
-          image_data: imageData,
-          next_suggestion: [] 
-        })
+        body: formData 
       });
 
       if (!res.ok) {
@@ -371,6 +412,10 @@ const MKTAI: React.FC = () => {
       }
 
       const data: AgentResponse = await res.json();
+      
+      if (imageData) {
+          data.image_data = imageData;
+      }
       
       if (data.user_profile) setUserProfile(data.user_profile);
       updateAgentMsg(agentMsgId, data);
@@ -400,7 +445,7 @@ const MKTAI: React.FC = () => {
   const handleSubmit = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (inputValue.trim() && !isProcessing) {
-      sendPromptToBackend(inputValue, null);
+      sendPromptToBackend(inputValue, null, null);
       setInputValue('');
     }
   };
@@ -476,7 +521,7 @@ const MKTAI: React.FC = () => {
                 </div>
               </button>
               <button 
-                onClick={() => sendPromptToBackend("Is Ashwagandha safe for hypothyroidism?", null)}
+                onClick={() => sendPromptToBackend("Is Ashwagandha safe for hypothyroidism?", null, null)}
                 className="flex items-center gap-4 p-5 rounded-2xl border border-zinc-800 bg-zinc-900/40 hover:bg-zinc-800 hover:border-zinc-600 transition-all group text-left"
               >
                 <div className="p-3 bg-zinc-950 rounded-xl border border-zinc-800 group-hover:border-zinc-700">
@@ -523,7 +568,7 @@ const MKTAI: React.FC = () => {
                       <AgentResponseView 
                         data={msg.agentResponse} 
                         isProcessing={isProcessing}
-                        onFollowUpClick={(txt) => sendPromptToBackend(txt, null)}
+                        onFollowUpClick={(txt) => sendPromptToBackend(txt, null, null)}
                       />
                     </>
                   )}
